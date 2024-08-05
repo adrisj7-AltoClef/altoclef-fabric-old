@@ -8,17 +8,20 @@ import adris.altoclef.util.progresscheck.MovementProgressChecker;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalRunAway;
 import net.minecraft.entity.AreaEffectCloudEntity;
+import net.minecraft.entity.Entity;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.HashSet;
+import java.util.Optional;
 
 public class DragonBreathTracker {
     private final HashSet<BlockPos> _breathBlocks = new HashSet<>();
 
     public void updateBreath(AltoClef mod) {
         _breathBlocks.clear();
-        for (AreaEffectCloudEntity cloud : mod.getEntityTracker().getTrackedEntities(AreaEffectCloudEntity.class)) {
-            for (BlockPos bad : WorldHelper.getBlocksTouchingBox(mod, cloud.getBoundingBox())) {
+        Optional<Entity> cloud = mod.getEntityTracker().getClosestEntity(AreaEffectCloudEntity.class);
+        if (cloud.isPresent()) {
+            for (BlockPos bad : WorldHelper.getBlocksTouchingBox(mod, cloud.get().getBoundingBox())) {
                 _breathBlocks.add(bad);
             }
         }
@@ -38,12 +41,9 @@ public class DragonBreathTracker {
         protected void onStart(AltoClef mod) {
             super.onStart(mod);
             mod.getBehaviour().push();
-            // Encourage placing of all blocks!
-            mod.getBehaviour().setBlockPlacePenalty(0);
-            mod.getBehaviour().setBlockBreakAdditionalPenalty(10); // Normally 2
-
+            mod.getBehaviour().setBlockPlacePenalty(Double.POSITIVE_INFINITY);
             // do NOT ever wander
-            _checker = new MovementProgressChecker(999999);
+            _checker = new MovementProgressChecker((int) Float.POSITIVE_INFINITY);
         }
 
         @Override
@@ -54,7 +54,7 @@ public class DragonBreathTracker {
 
         @Override
         protected Goal newGoal(AltoClef mod) {
-            return new GoalRunAway(2, _breathBlocks.toArray(BlockPos[]::new));
+            return new GoalRunAway(10, _breathBlocks.toArray(BlockPos[]::new));
         }
 
         @Override

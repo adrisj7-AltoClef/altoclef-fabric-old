@@ -5,26 +5,25 @@ import adris.altoclef.util.baritone.GoalRunAwayFromEntities;
 import baritone.api.pathing.goals.Goal;
 import net.minecraft.entity.Entity;
 
-import java.util.List;
-import java.util.function.Supplier;
+import java.util.Optional;
 
 public abstract class RunAwayFromEntitiesTask extends CustomBaritoneGoalTask {
 
-    private final Supplier<List<Entity>> _runAwaySupplier;
+    private final Entity _runAwaySupplier;
 
     private final double _distanceToRun;
     private final boolean _xz;
     // See GoalrunAwayFromEntities penalty value
     private final double _penalty;
 
-    public RunAwayFromEntitiesTask(Supplier<List<Entity>> toRunAwayFrom, double distanceToRun, boolean xz, double penalty) {
+    public RunAwayFromEntitiesTask(Entity toRunAwayFrom, double distanceToRun, boolean xz, double penalty) {
         _runAwaySupplier = toRunAwayFrom;
         _distanceToRun = distanceToRun;
         _xz = xz;
         _penalty = penalty;
     }
 
-    public RunAwayFromEntitiesTask(Supplier<List<Entity>> toRunAwayFrom, double distanceToRun, double penalty) {
+    public RunAwayFromEntitiesTask(Entity toRunAwayFrom, double distanceToRun, double penalty) {
         this(toRunAwayFrom, distanceToRun, false, penalty);
     }
 
@@ -42,8 +41,8 @@ public abstract class RunAwayFromEntitiesTask extends CustomBaritoneGoalTask {
         }
 
         @Override
-        protected List<net.minecraft.entity.Entity> getEntities(AltoClef mod) {
-            return _runAwaySupplier.get();
+        protected Optional<Entity> getEntities(AltoClef mod) {
+            return Optional.ofNullable(_runAwaySupplier);
         }
     }
 }

@@ -1,13 +1,12 @@
 package adris.altoclef.util.baritone;
 
 import adris.altoclef.AltoClef;
-import adris.altoclef.util.helpers.BaritoneHelper;
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalXZ;
 import baritone.api.pathing.goals.GoalYLevel;
 import net.minecraft.entity.Entity;
 
-import java.util.List;
+import java.util.Optional;
 
 public abstract class GoalRunAwayFromEntities implements Goal {
 
@@ -30,17 +29,16 @@ public abstract class GoalRunAwayFromEntities implements Goal {
 
     @Override
     public boolean isInGoal(int x, int y, int z) {
-        List<Entity> entities = getEntities(_mod);
-        synchronized (BaritoneHelper.MINECRAFT_LOCK) {
-            for (Entity entity : entities) {
-                if (entity == null || !entity.isAlive()) continue;
+        if (getEntities(_mod).isPresent()) {
+            Entity entity = getEntities(_mod).get();
+            if (entity.isAlive()) {
                 double sqDistance;
                 if (_xzOnly) {
                     sqDistance = entity.getPos().subtract(x, y, z).multiply(1, 0, 1).lengthSquared();
                 } else {
                     sqDistance = entity.squaredDistanceTo(x, y, z);
                 }
-                if (sqDistance < _distance * _distance) return false;
+                return !(sqDistance < _distance * _distance);
             }
         }
         return true;
@@ -50,13 +48,11 @@ public abstract class GoalRunAwayFromEntities implements Goal {
     public double heuristic(int x, int y, int z) {
         // The lower the cost, the better.
         double costSum = 0;
-        List<Entity> entities = getEntities(_mod);
-        synchronized (BaritoneHelper.MINECRAFT_LOCK) {
-            int max = 10; // If we have 100 players, this will never calculate.
-            int counter = 0;
-            for (Entity entity : entities) {
-                counter++;
-                if (entity == null || !entity.isAlive()) continue;
+        int counter = 0;
+        if (getEntities(_mod).isPresent()) {
+            Entity entity = getEntities(_mod).get();
+            counter++;
+            if (entity.isAlive()) {
                 double cost = getCostOfEntity(entity, x, y, z);
                 if (cost != 0) {
                     // We want the CLOSER entities to have a bigger weight than the further ones.
@@ -65,16 +61,16 @@ public abstract class GoalRunAwayFromEntities implements Goal {
                     // Bad >:(
                     costSum += 1000;
                 }
-                if (counter >= max) break;
+                ;
             }
-            if (counter > 0) {
-                costSum /= counter;
-            }
-            return costSum * _penaltyFactor;
         }
+        if (counter > 0) {
+            costSum /= counter;
+        }
+        return costSum * _penaltyFactor;
     }
 
-    protected abstract List<Entity> getEntities(AltoClef mod);
+    protected abstract Optional<Entity> getEntities(AltoClef mod);
 
     // Virtual
     protected double getCostOfEntity(Entity entity, int x, int y, int z) {

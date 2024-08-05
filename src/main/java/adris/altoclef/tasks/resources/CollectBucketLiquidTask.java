@@ -7,14 +7,16 @@ import adris.altoclef.tasks.DoToClosestBlockTask;
 import adris.altoclef.tasks.InteractWithBlockTask;
 import adris.altoclef.tasks.ResourceTask;
 import adris.altoclef.tasks.construction.DestroyBlockTask;
-import adris.altoclef.tasks.movement.*;
+import adris.altoclef.tasks.movement.DefaultGoToDimensionTask;
+import adris.altoclef.tasks.movement.GetCloseToBlockTask;
+import adris.altoclef.tasks.movement.TimeoutWanderTask;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.Dimension;
 import adris.altoclef.util.ItemTarget;
-import adris.altoclef.util.time.TimerGame;
 import adris.altoclef.util.helpers.LookHelper;
 import adris.altoclef.util.helpers.WorldHelper;
 import adris.altoclef.util.progresscheck.MovementProgressChecker;
+import adris.altoclef.util.time.TimerGame;
 import baritone.api.utils.input.Input;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
@@ -22,10 +24,10 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.RaycastContext;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 public class CollectBucketLiquidTask extends ResourceTask {
@@ -39,7 +41,6 @@ public class CollectBucketLiquidTask extends ResourceTask {
     private final Item _target;
     private final Block _toCollect;
     private final String _liquidName;
-    private final TimeoutWanderTask _wanderTask = new TimeoutWanderTask(15f);
     private final MovementProgressChecker _progressChecker = new MovementProgressChecker();
 
     private boolean wasWandering = false;
@@ -60,18 +61,16 @@ public class CollectBucketLiquidTask extends ResourceTask {
     @SuppressWarnings("ConstantConditions")
     @Override
     protected void onResourceStart(AltoClef mod) {
+        mod.getBlockTracker().trackBlock(_toCollect);
         // Track fluids
         mod.getBehaviour().push();
         mod.getBehaviour().setRayTracingFluidHandling(RaycastContext.FluidHandling.SOURCE_ONLY);
-        mod.getBlockTracker().trackBlock(_toCollect);
 
         // Avoid breaking / placing blocks at our liquid
         mod.getBehaviour().avoidBlockBreaking((pos) -> MinecraftClient.getInstance().world.getBlockState(pos).getBlock() == _toCollect);
         mod.getBehaviour().avoidBlockPlacing((pos) -> MinecraftClient.getInstance().world.getBlockState(pos).getBlock() == _toCollect);
 
         //_blacklist.clear();
-
-        _wanderTask.resetWander();
 
         _progressChecker.reset();
     }
@@ -89,12 +88,11 @@ public class CollectBucketLiquidTask extends ResourceTask {
 
     @Override
     protected Task onResourceTick(AltoClef mod) {
-
-        // Run one update to prevent the false fail bug?
-        _progressChecker.check(mod);
-
+        if (mod.getClientBaritone().getPathingBehavior().isPathing()) {
+            _progressChecker.reset();
+        }
         // If we're standing inside a liquid, go pick it up.
-        if (_tryImmediatePickupTimer.elapsed()) {
+        if (_tryImmediatePickupTimer.elapsed() && !mod.getItemStorage().hasItem(Items.WATER_BUCKET)) {
             Block standingInside = mod.getWorld().getBlockState(mod.getPlayer().getBlockPos()).getBlock();
             if (standingInside == _toCollect) {
                 setDebugState("Trying to collect (we are in it)");
@@ -119,12 +117,6 @@ public class CollectBucketLiquidTask extends ResourceTask {
             return null;
         }
 
-        if (_wanderTask.isActive() && !_wanderTask.isFinished(mod)) {
-            setDebugState("Failed to receive: Wandering.");
-            _progressChecker.reset();
-            return _wanderTask;
-        }
-
         // Get buckets if we need em
         int bucketsNeeded = _count - mod.getItemStorage().getItemCount(Items.BUCKET) - mod.getItemStorage().getItemCount(_target);
         if (bucketsNeeded > 0) {
@@ -137,47 +129,50 @@ public class CollectBucketLiquidTask extends ResourceTask {
             if (!WorldHelper.canReach(mod, blockPos)) return false;
             if (!WorldHelper.canReach(mod, blockPos.up())) return false; // We may try reaching the block above.
             assert MinecraftClient.getInstance().world != null;
-
-            // Lava, we break the block above. If it's bedrock, ignore.
-            if (_toCollect == Blocks.LAVA && !WorldHelper.canBreak(mod, blockPos.up())) {
+            // We break the block above. If it's bedrock, ignore.
+            if (mod.getWorld().getBlockState(blockPos.up()).getBlock() == Blocks.BEDROCK) {
                 return false;
             }
-
             return WorldHelper.isSourceBlock(mod, blockPos, false);
         };
 
         // Find nearest water and right click it
-        if (mod.getBlockTracker().anyFound(isSourceLiquid, _toCollect)) {
-            // We want to MINIMIZE this distance to liquid.
-            setDebugState("Trying to collect...");
-            //Debug.logMessage("TEST: " + RayTraceUtils.fluidHandling);
-
-            return new DoToClosestBlockTask(blockPos -> {
-                // Clear above if lava because we can't enter.
-                // but NOT if we're standing right above.
-                if (WorldHelper.isSolid(mod, blockPos.up())) {
-
-                    if (!_progressChecker.check(mod)) {
-                        Debug.logMessage("Failed to break, blacklisting & wandering");
-                        mod.getBlockTracker().requestBlockUnreachable(blockPos);
-                        _blacklist.add(blockPos);
-                        return _wanderTask;
+        if (mod.getBlockTracker().isTracking(_toCollect)) {
+            Optional<BlockPos> nearestSource = mod.getBlockTracker().getNearestTracking(isSourceLiquid, _toCollect);
+            if (nearestSource.isPresent()) {
+                Block nearestSourceBlock = mod.getWorld().getBlockState(nearestSource.get()).getBlock();
+                // We want to MINIMIZE this distance to liquid.
+                setDebugState("Trying to collect...");
+                //Debug.logMessage("TEST: " + RayTraceUtils.fluidHandling);
+                return new DoToClosestBlockTask(blockPos -> {
+                    // Clear above if lava because we can't enter.
+                    // but NOT if we're standing right above.
+                    if (WorldHelper.isSolid(mod, blockPos.up())) {
+                        if (!_progressChecker.check(mod)) {
+                            mod.getClientBaritone().getPathingBehavior().cancelEverything();
+                            mod.getClientBaritone().getPathingBehavior().forceCancel();
+                            mod.getClientBaritone().getExploreProcess().onLostControl();
+                            mod.getClientBaritone().getCustomGoalProcess().onLostControl();
+                            Debug.logMessage("Failed to break, blacklisting.");
+                            mod.getBlockTracker().requestBlockUnreachable(blockPos);
+                            _blacklist.add(blockPos);
+                        }
+                        return new DestroyBlockTask(blockPos.up());
                     }
-                    return new DestroyBlockTask(blockPos.up());
-                }
-
-                // We can reach the block.
-                if (LookHelper.getReach(blockPos).isPresent()) {
-                    return new InteractWithBlockTask(new ItemTarget(Items.BUCKET, 1), blockPos, _toCollect != Blocks.LAVA, new Vec3i(0, 1, 0));
-                }
-                // Get close enough.
-                // up because if we go below we'll try to move next to the liquid (for lava, not a good move)
-                if (this.thisOrChildAreTimedOut() && !wasWandering) {
-                    mod.getBlockTracker().requestBlockUnreachable(blockPos.up());
-                    wasWandering = true;
-                }
-                return new GetCloseToBlockTask(blockPos.up());
-            }, isSourceLiquid, _toCollect);
+                    // We can reach the block.
+                    if (LookHelper.getReach(blockPos).isPresent() &&
+                            mod.getClientBaritone().getPathingBehavior().isSafeToCancel()) {
+                        return new InteractWithBlockTask(new ItemTarget(Items.BUCKET, 1), blockPos, _toCollect != Blocks.LAVA);
+                    }
+                    // Get close enough.
+                    // up because if we go below we'll try to move next to the liquid (for lava, not a good move)
+                    if (this.thisOrChildAreTimedOut() && !wasWandering) {
+                        mod.getBlockTracker().requestBlockUnreachable(blockPos.up());
+                        wasWandering = true;
+                    }
+                    return new GetCloseToBlockTask(blockPos.up());
+                }, isSourceLiquid, nearestSourceBlock);
+            }
         }
 
         // Dimension
@@ -188,7 +183,7 @@ public class CollectBucketLiquidTask extends ResourceTask {
         // Oof, no liquid found.
         setDebugState("Searching for liquid by wandering around aimlessly");
 
-        return new TimeoutWanderTask(Float.POSITIVE_INFINITY);
+        return new TimeoutWanderTask();
     }
 
     @Override

@@ -7,8 +7,8 @@ import adris.altoclef.tasks.construction.PlaceBlockTask;
 import adris.altoclef.tasks.construction.PlaceStructureBlockTask;
 import adris.altoclef.tasks.container.SmeltInFurnaceTask;
 import adris.altoclef.tasks.entity.DoToClosestEntityTask;
-import adris.altoclef.tasks.misc.EquipArmorTask;
 import adris.altoclef.tasks.entity.KillPlayerTask;
+import adris.altoclef.tasks.misc.EquipArmorTask;
 import adris.altoclef.tasks.movement.RunAwayFromEntitiesTask;
 import adris.altoclef.tasks.movement.SearchChunksExploreTask;
 import adris.altoclef.tasks.resources.CollectFoodTask;
@@ -16,12 +16,11 @@ import adris.altoclef.tasksystem.Task;
 import adris.altoclef.ui.MessagePriority;
 import adris.altoclef.util.ItemTarget;
 import adris.altoclef.util.SmeltTarget;
-import adris.altoclef.util.time.TimerGame;
-import adris.altoclef.util.helpers.BaritoneHelper;
 import adris.altoclef.util.helpers.ItemHelper;
 import adris.altoclef.util.helpers.LookHelper;
 import adris.altoclef.util.helpers.StorageHelper;
 import adris.altoclef.util.progresscheck.MovementProgressChecker;
+import adris.altoclef.util.time.TimerGame;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -34,9 +33,6 @@ import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Roams around the world to terminate Sarah Khaannah
@@ -126,12 +122,11 @@ public class TerminatorTask extends Task {
 
                 _runAwayExtraTime.reset();
                 try {
-                    _runAwayTask = new RunAwayFromPlayersTask(() -> {
-                        Stream<PlayerEntity> stream = mod.getEntityTracker().getTrackedEntities(PlayerEntity.class).stream();
-                        synchronized (BaritoneHelper.MINECRAFT_LOCK) {
-                            return stream.filter(toAccept -> shouldPunk(mod, toAccept)).collect(Collectors.toList());
-                        }
-                    }, RUN_AWAY_DISTANCE);
+                    Optional<Entity> player = mod.getEntityTracker().getClosestEntity(PlayerEntity.class);
+                    if (player.isPresent() && player.get() instanceof PlayerEntity playerEntity
+                            && shouldPunk(mod, playerEntity)) {
+                        _runAwayTask = new RunAwayFromPlayersTask(player.get(), RUN_AWAY_DISTANCE);
+                    }
                 } catch (ConcurrentModificationException e) {
                     // oof
                     Debug.logWarning("Duct tape over ConcurrentModificationException (see log)");
@@ -160,17 +155,17 @@ public class TerminatorTask extends Task {
             if (mod.getEntityTracker().getClosestEntity(mod.getPlayer().getPos(), toPunk -> shouldPunk(mod, (PlayerEntity) toPunk), PlayerEntity.class).isPresent()) {
                 setDebugState("Punking.");
                 return new DoToClosestEntityTask(
-                    entity -> {
-                        if (entity instanceof PlayerEntity) {
-                            tryDoFunnyMessageTo(mod, (PlayerEntity) entity);
-                            return new KillPlayerTask(entity.getName().getString());
-                        }
-                        // Should never happen.
-                        Debug.logWarning("This should never happen.");
-                        return _scanTask;
-                    },
-                    interact -> shouldPunk(mod, (PlayerEntity) interact),
-                    PlayerEntity.class
+                        entity -> {
+                            if (entity instanceof PlayerEntity) {
+                                tryDoFunnyMessageTo(mod, (PlayerEntity) entity);
+                                return new KillPlayerTask(entity.getName().getString());
+                            }
+                            // Should never happen.
+                            Debug.logWarning("This should never happen.");
+                            return _scanTask;
+                        },
+                        interact -> shouldPunk(mod, (PlayerEntity) interact),
+                        PlayerEntity.class
                 );
             }
         }
@@ -276,6 +271,25 @@ public class TerminatorTask extends Task {
         return "Prepare to get punked, kid";
     }
 
+    private static class RunAwayFromPlayersTask extends RunAwayFromEntitiesTask {
+
+        public RunAwayFromPlayersTask(Entity toRunAwayFrom, double distanceToRun) {
+            super(toRunAwayFrom, distanceToRun, true, 0.1);
+            // More lenient progress checker
+            _checker = new MovementProgressChecker();
+        }
+
+        @Override
+        protected boolean isEqual(Task other) {
+            return other instanceof RunAwayFromPlayersTask;
+        }
+
+        @Override
+        protected String toDebugString() {
+            return "Running away from players";
+        }
+    }
+
     private class ScanChunksInRadius extends SearchChunksExploreTask {
 
         private final BlockPos _center;
@@ -301,22 +315,24 @@ public class TerminatorTask extends Task {
             if (_closestPlayerLastPos != null) {
                 double lowestScore = Double.POSITIVE_INFINITY;
                 ChunkPos bestChunk = null;
-                for (ChunkPos toSearch : chunks) {
-                    double cx = (toSearch.getStartX() + toSearch.getEndX() + 1) / 2.0, cz = (toSearch.getStartZ() + toSearch.getEndZ() + 1) / 2.0;
-                    double px = mod.getPlayer().getX(), pz = mod.getPlayer().getZ();
-                    double distanceSq = (cx - px) * (cx - px) + (cz - pz) * (cz - pz);
-                    double pdx = _closestPlayerLastPos.getX() - cx, pdz = _closestPlayerLastPos.getZ() - cz;
-                    double distanceToLastPlayerPos = pdx * pdx + pdz * pdz;
-                    Vec3d direction = _closestPlayerLastPos.subtract(_closestPlayerLastObservePos).multiply(1, 0, 1).normalize();
-                    double dirx = direction.x, dirz = direction.z;
-                    double correctDistance = pdx * dirx + pdz * dirz;
-                    double tempX = dirx * correctDistance,
-                            tempZ = dirz * correctDistance;
-                    double perpendicularDistance = ((pdx - tempX) * (pdx - tempX)) + ((pdz - tempZ) * (pdz - tempZ));
-                    double score = distanceSq + distanceToLastPlayerPos * 0.6 - correctDistance * 2 + perpendicularDistance * 0.5;
-                    if (score < lowestScore) {
-                        lowestScore = score;
-                        bestChunk = toSearch;
+                if (!chunks.isEmpty()) {
+                    for (ChunkPos toSearch : chunks) {
+                        double cx = (toSearch.getStartX() + toSearch.getEndX() + 1) / 2.0, cz = (toSearch.getStartZ() + toSearch.getEndZ() + 1) / 2.0;
+                        double px = mod.getPlayer().getX(), pz = mod.getPlayer().getZ();
+                        double distanceSq = (cx - px) * (cx - px) + (cz - pz) * (cz - pz);
+                        double pdx = _closestPlayerLastPos.getX() - cx, pdz = _closestPlayerLastPos.getZ() - cz;
+                        double distanceToLastPlayerPos = pdx * pdx + pdz * pdz;
+                        Vec3d direction = _closestPlayerLastPos.subtract(_closestPlayerLastObservePos).multiply(1, 0, 1).normalize();
+                        double dirx = direction.x, dirz = direction.z;
+                        double correctDistance = pdx * dirx + pdz * dirz;
+                        double tempX = dirx * correctDistance,
+                                tempZ = dirz * correctDistance;
+                        double perpendicularDistance = ((pdx - tempX) * (pdx - tempX)) + ((pdz - tempZ) * (pdz - tempZ));
+                        double score = distanceSq + distanceToLastPlayerPos * 0.6 - correctDistance * 2 + perpendicularDistance * 0.5;
+                        if (score < lowestScore) {
+                            lowestScore = score;
+                            bestChunk = toSearch;
+                        }
                     }
                 }
                 return bestChunk;
@@ -335,25 +351,6 @@ public class TerminatorTask extends Task {
         @Override
         protected String toDebugString() {
             return "Scanning around a radius";
-        }
-    }
-
-    private static class RunAwayFromPlayersTask extends RunAwayFromEntitiesTask {
-
-        public RunAwayFromPlayersTask(Supplier<List<Entity>> toRunAwayFrom, double distanceToRun) {
-            super(toRunAwayFrom, distanceToRun, true, 0.1);
-            // More lenient progress checker
-            _checker = new MovementProgressChecker(2);
-        }
-
-        @Override
-        protected boolean isEqual(Task other) {
-            return other instanceof RunAwayFromPlayersTask;
-        }
-
-        @Override
-        protected String toDebugString() {
-            return "Running away from players";
         }
     }
 }

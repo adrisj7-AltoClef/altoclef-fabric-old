@@ -8,11 +8,13 @@ import adris.altoclef.tasks.movement.TimeoutWanderTask;
 import adris.altoclef.tasksystem.ITaskRequiresGrounded;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.ItemTarget;
+import adris.altoclef.util.helpers.ItemHelper;
 import adris.altoclef.util.helpers.WorldHelper;
 import adris.altoclef.util.progresscheck.MovementProgressChecker;
 import baritone.api.schematic.AbstractSchematic;
 import baritone.api.schematic.ISchematic;
 import baritone.api.utils.BlockOptionalMeta;
+import baritone.api.utils.input.Input;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -36,7 +38,7 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
     private final boolean _useThrowaways;
     private final boolean _autoCollectStructureBlocks;
     private final MovementProgressChecker _progressChecker = new MovementProgressChecker();
-    private final TimeoutWanderTask _wanderTask = new TimeoutWanderTask(3, true); // This can get stuck forever, so we increase the range.
+    private final TimeoutWanderTask _wanderTask = new TimeoutWanderTask(5); // This can get stuck forever, so we increase the range.
     private Task _materialTask;
     private int _failCount = 0;
 
@@ -52,30 +54,49 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
     }
 
     public static int getMaterialCount(AltoClef mod) {
-        return mod.getItemStorage().getItemCount(Items.DIRT, Items.COBBLESTONE, Items.NETHERRACK);
+        return mod.getItemStorage().getItemCount(Items.DIRT, Items.COBBLESTONE, Items.NETHERRACK, Items.COBBLED_DEEPSLATE);
     }
 
     public static Task getMaterialTask(int count) {
-        return TaskCatalogue.getSquashedItemTask(new ItemTarget(Items.DIRT, count), new ItemTarget(Items.COBBLESTONE, count), new ItemTarget(Items.NETHERRACK, count));
+        return TaskCatalogue.getSquashedItemTask(new ItemTarget(Items.DIRT, count), new ItemTarget(Items.COBBLESTONE,
+                count), new ItemTarget(Items.NETHERRACK, count), new ItemTarget(Items.COBBLED_DEEPSLATE, count));
     }
 
     @Override
     protected void onStart(AltoClef mod) {
         _progressChecker.reset();
+        mod.getBehaviour().push();
+        mod.getBehaviour().addProtectedItems(ItemHelper.blocksToItems(_toPlace));
         // If we get interrupted by another task, this might cause problems...
         //_wanderTask.resetWander();
     }
 
     @Override
     protected Task onTick(AltoClef mod) {
-
+        if (WorldHelper.isInNetherPortal(mod)) {
+            if (!mod.getClientBaritone().getPathingBehavior().isPathing()) {
+                setDebugState("Getting out from nether portal");
+                mod.getInputControls().hold(Input.SNEAK);
+                mod.getInputControls().hold(Input.MOVE_FORWARD);
+                return null;
+            } else {
+                mod.getInputControls().release(Input.SNEAK);
+                mod.getInputControls().release(Input.MOVE_BACK);
+                mod.getInputControls().release(Input.MOVE_FORWARD);
+            }
+        } else {
+            if (mod.getClientBaritone().getPathingBehavior().isPathing()) {
+                mod.getInputControls().release(Input.SNEAK);
+                mod.getInputControls().release(Input.MOVE_BACK);
+                mod.getInputControls().release(Input.MOVE_FORWARD);
+            }
+        }
         // Perform timeout wander
         if (_wanderTask.isActive() && !_wanderTask.isFinished(mod)) {
             setDebugState("Wandering.");
             _progressChecker.reset();
             return _wanderTask;
         }
-
         if (_autoCollectStructureBlocks) {
             if (_materialTask != null && _materialTask.isActive() && !_materialTask.isFinished(mod)) {
                 setDebugState("No structure items, collecting cobblestone + dirt as default.");
@@ -114,7 +135,6 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
             return new GetToBlockTask(_target.up(), false);
         } else {
             setDebugState("Letting baritone place a block.");
-
             // Perform baritone placement
             if (!mod.getClientBaritone().getBuilderProcess().isActive()) {
                 Debug.logInternal("Run Structure Build");
@@ -122,12 +142,12 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
                 mod.getClientBaritone().getBuilderProcess().build("structure", schematic, _target);
             }
         }
-
         return null;
     }
 
     @Override
     protected void onStop(AltoClef mod, Task interruptTask) {
+        mod.getBehaviour().pop();
         mod.getClientBaritone().getBuilderProcess().onLostControl();
     }
 
@@ -173,18 +193,20 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
         public BlockState desiredState(int x, int y, int z, BlockState blockState, List<BlockState> available) {
             if (x == 0 && y == 0 && z == 0) {
                 // Place!!
-                for (BlockState possible : available) {
-                    if (possible == null) continue;
-                    if (_useThrowaways && _mod.getClientBaritoneSettings().acceptableThrowawayItems.value.contains(possible.getBlock().asItem())) {
-                        return possible;
-                    }
-                    if (Arrays.asList(_toPlace).contains(possible.getBlock())) {
-                        return possible;
+                if (!available.isEmpty()) {
+                    for (BlockState possible : available) {
+                        if (possible == null) continue;
+                        if (_useThrowaways && _mod.getClientBaritoneSettings().acceptableThrowawayItems.value.contains(possible.getBlock().asItem())) {
+                            return possible;
+                        }
+                        if (Arrays.asList(_toPlace).contains(possible.getBlock())) {
+                            return possible;
+                        }
                     }
                 }
                 Debug.logInternal("Failed to find throwaway block");
                 // No throwaways available!!
-                return new BlockOptionalMeta(Blocks.COBBLESTONE).getAnyBlockState();
+                return new BlockOptionalMeta(Blocks.DIRT).getAnyBlockState();
             }
             // Don't care.
             return blockState;

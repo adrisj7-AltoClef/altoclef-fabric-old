@@ -11,7 +11,7 @@
     "ClientInteractWithBlockMixin",
     "ClientPlayerInteractionAccessor",
     "ClientUIMixin",
-    "EntityAccessor",
+    "DeathScreenAccessor",
     "GameOverlayMixin",
     "PersistentProjectileEntityAccessor",
     "SlotClickMixin",
@@ -25,6 +25,7 @@
     "ClientTickMixin",
     "EntryMixin",
     "LoadChunkMixin",
+    "MixinLocalPlayer",
     "PlayerCollidesWithEntityMixin"
   ],
   "injectors": {
