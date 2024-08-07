@@ -20,7 +20,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3i;
 
-import java.util.HashSet;
+import java.util.Optional;
 
 @SuppressWarnings("ALL")
 @Deprecated
@@ -168,7 +168,7 @@ public class ConstructNetherPortalSpeedrunTask extends adris.altoclef.tasksystem
                 _firstSearch = false;
                 _lavaSearchTimer.reset();
                 Debug.logMessage("(Searching for lava lake with portalable spot nearby...)");
-                BlockPos lavaPos = findLavaLake(mod, mod.getPlayer().getBlockPos());
+                BlockPos lavaPos = findLavaLake(mod);
                 if (lavaPos != null) {
                     // We have a lava lake, set our portal origin!
                     BlockPos foundPortalRegion = getPortalableRegion(lavaPos, mod.getPlayer().getBlockPos(), new Vec3i(-1, 0, 0), PORTALABLE_REGION_SIZE, 20);
@@ -335,34 +335,27 @@ public class ConstructNetherPortalSpeedrunTask extends adris.altoclef.tasksystem
 
 
     // Scans to find the nearest lava lake (collection of lava bigger than 12 blocks)
-    private BlockPos findLavaLake(AltoClef mod, BlockPos playerPos) {
-        HashSet<BlockPos> alreadyExplored = new HashSet<>();
-
-        double nearestSqDistance = Double.POSITIVE_INFINITY;
+    private BlockPos findLavaLake(AltoClef mod) {
         BlockPos nearestLake = null;
-        for (BlockPos pos : mod.getBlockTracker().getKnownLocations(Blocks.LAVA)) {
-            if (alreadyExplored.contains(pos)) continue;
-            double sqDist = playerPos.getSquaredDistance(pos);
-            if (sqDist < nearestSqDistance) {
-                int depth = getNumberOfBlocksAdjacent(alreadyExplored, pos);
-                Debug.logMessage("Found with depth " + depth);
-                if (depth >= 12) {
-                    nearestSqDistance = sqDist;
-                    nearestLake = pos;
+        if (mod.getBlockTracker().isTracking(Blocks.LAVA)) {
+            Optional<BlockPos> lavas = mod.getBlockTracker().getNearestTracking(Blocks.LAVA);
+            if (lavas.isPresent()) {
+                int depth = getNumberOfBlocksAdjacent(lavas.get());
+                if (depth != 0) {
+                    Debug.logMessage("Found with depth " + depth);
+                    if (depth >= 12) {
+                        nearestLake = lavas.get();
+                    }
                 }
             }
         }
-
         return nearestLake;
     }
 
     // Used to flood-scan for blocks of lava.
-    private int getNumberOfBlocksAdjacent(HashSet<BlockPos> alreadyExplored, BlockPos origin) {
-        // Base case: We already explored this one
-        if (alreadyExplored.contains(origin)) return 0;
-        alreadyExplored.add(origin);
-
+    private int getNumberOfBlocksAdjacent(BlockPos origin) {
         // Base case: We hit a non-full lava block.
+        assert MinecraftClient.getInstance().world != null;
         BlockState s = MinecraftClient.getInstance().world.getBlockState(origin);
         if (s.getBlock() != Blocks.LAVA) {
             return 0;
@@ -380,7 +373,7 @@ public class ConstructNetherPortalSpeedrunTask extends adris.altoclef.tasksystem
         int bonus = 0;
         for (BlockPos check : toCheck) {
             // This block is new! Explore out from it.
-            bonus += getNumberOfBlocksAdjacent(alreadyExplored, check);
+            bonus += getNumberOfBlocksAdjacent(check);
         }
 
         return bonus + 1;

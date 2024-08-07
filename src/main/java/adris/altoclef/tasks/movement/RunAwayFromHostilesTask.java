@@ -3,14 +3,12 @@ package adris.altoclef.tasks.movement;
 import adris.altoclef.AltoClef;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.baritone.GoalRunAwayFromEntities;
-import adris.altoclef.util.helpers.BaritoneHelper;
 import baritone.api.pathing.goals.Goal;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.mob.SkeletonEntity;
 
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.Optional;
 
 public class RunAwayFromHostilesTask extends CustomBaritoneGoalTask {
 
@@ -54,15 +52,20 @@ public class RunAwayFromHostilesTask extends CustomBaritoneGoalTask {
         }
 
         @Override
-        protected List<Entity> getEntities(AltoClef mod) {
-            List<Entity> result;
-            Stream<Entity> stream = mod.getEntityTracker().getHostiles().stream();
-            synchronized (BaritoneHelper.MINECRAFT_LOCK) {
-                if (!_includeSkeletons) {
-                    stream = stream.filter(hostile -> !(hostile instanceof SkeletonEntity));
+        protected Optional<Entity> getEntities(AltoClef mod) {
+            List<Entity> hostiles = mod.getEntityTracker().getHostiles();
+            if (!hostiles.isEmpty()) {
+                for (Entity hostile : hostiles) {
+                    Optional<Entity> closestHostile = mod.getEntityTracker().getClosestEntity(hostile.getClass());
+                    if (closestHostile.isPresent()) {
+                        if (!_includeSkeletons && closestHostile.get() instanceof SkeletonEntity) {
+                            return Optional.empty();
+                        }
+                        return closestHostile;
+                    }
                 }
-                return stream.collect(Collectors.toList());
             }
+            return Optional.empty();
         }
     }
 }

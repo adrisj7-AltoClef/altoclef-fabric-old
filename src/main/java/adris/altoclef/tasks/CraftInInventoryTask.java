@@ -77,7 +77,9 @@ public class CraftInInventoryTask extends ResourceTask {
                 }
             }
         }
-
+        if (StorageHelper.isBigCraftingOpen()) {
+            StorageHelper.closeScreen();
+        }
         ItemTarget toGet = _itemTargets[0];
         Item toGetItem = toGet.getMatches()[0];
         if (_collect && !StorageHelper.hasRecipeMaterialsOrTarget(mod, _target)) {

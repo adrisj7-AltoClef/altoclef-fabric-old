@@ -11,6 +11,7 @@ import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.ItemTarget;
 import adris.altoclef.util.helpers.WorldHelper;
 import adris.altoclef.util.time.TimerGame;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
@@ -161,7 +162,7 @@ public class ConstructNetherPortalObsidianTask extends Task {
         // Place frame
         if (placeTarget != null) {
             setDebugState("Placing frame...");
-            return new PlaceBlockTask(placeTarget, Blocks.OBSIDIAN);
+            return new PlaceBlockTask(placeTarget, new Block[]{Blocks.OBSIDIAN}, false, true);
         }
 
         // Clear middle

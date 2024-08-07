@@ -15,6 +15,7 @@ import adris.altoclef.util.helpers.StorageHelper;
 import adris.altoclef.util.slots.SmokerSlot;
 import adris.altoclef.util.time.TimerGame;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
@@ -31,6 +32,7 @@ import net.minecraft.screen.SmokerScreenHandler;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public class CollectMeatTask extends Task {
     private static final CookableFoodTarget[] COOKABLE_FOODS = new CookableFoodTarget[]{
@@ -54,8 +56,8 @@ public class CollectMeatTask extends Task {
         if (count <= 0) return 0;
         for (CookableFoodTarget cookable : COOKABLE_FOODS) {
             if (food.getItem() == cookable.getRaw()) {
-                assert cookable.getCooked().getFoodComponent() != null;
-                return count * cookable.getCooked().getFoodComponent().getHunger();
+                assert cookable.getCooked().getComponents().get(DataComponentTypes.FOOD) != null;
+                return count * Objects.requireNonNull(cookable.getCooked().getComponents().get(DataComponentTypes.FOOD)).nutrition();
             }
         }
         return 0;
@@ -153,10 +155,6 @@ public class CollectMeatTask extends Task {
                 if (!mod.getEntityTracker().entityFound(cookable.mobToKill)) continue;
                 Optional<Entity> nearest = mod.getEntityTracker().getClosestEntity(mod.getPlayer().getPos(), cookable.mobToKill);
                 if (nearest.isEmpty()) continue; // ?? This crashed once?
-                if (nearest.get() instanceof LivingEntity livingEntity) {
-                    // Peta
-                    if (livingEntity.isBaby()) continue;
-                }
                 int hungerPerformance = cookable.getCookedUnits();
                 double sqDistance = nearest.get().squaredDistanceTo(mod.getPlayer());
                 double score = (double) 100 * hungerPerformance / (sqDistance);
@@ -168,7 +166,8 @@ public class CollectMeatTask extends Task {
             }
             if (bestEntity != null) {
                 setDebugState("Killing " + bestEntity.getType().getTranslationKey());
-                _currentResourceTask = killTaskOrNull(bestEntity, bestRawFood);
+                Predicate<Entity> notBaby = entity -> entity instanceof LivingEntity livingEntity && !livingEntity.isBaby();
+                _currentResourceTask = killTaskOrNull(bestEntity, notBaby, bestRawFood);
                 return _currentResourceTask;
             }
         }
@@ -187,8 +186,8 @@ public class CollectMeatTask extends Task {
         return new TimeoutWanderTask();
     }
 
-    private Task killTaskOrNull(Entity entity, Item itemToGrab) {
-        return new KillAndLootTask(entity.getClass(), new ItemTarget(itemToGrab, 1));
+    private Task killTaskOrNull(Entity entity, Predicate<Entity> entityPredicate, Item itemToGrab) {
+        return new KillAndLootTask(entity.getClass(), entityPredicate, new ItemTarget(itemToGrab, 1));
     }
 
     private Task pickupTaskOrNull(AltoClef mod, Item itemToGrab, double maxRange) {
@@ -256,8 +255,8 @@ public class CollectMeatTask extends Task {
         }
 
         public int getCookedUnits() {
-            assert getCooked().getFoodComponent() != null;
-            return getCooked().getFoodComponent().getHunger();
+            assert getCooked().getComponents().get(DataComponentTypes.FOOD) != null;
+            return Objects.requireNonNull(getCooked().getComponents().get(DataComponentTypes.FOOD)).nutrition();
         }
     }
 }

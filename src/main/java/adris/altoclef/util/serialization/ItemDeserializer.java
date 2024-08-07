@@ -42,7 +42,7 @@ public class ItemDeserializer extends StdDeserializer<Object> {
                 // Translation key (the proper way)
                 String itemKey = p.getText();
                 itemKey = ItemHelper.trimItemName(itemKey);
-                Identifier identifier = new Identifier(itemKey);
+                Identifier identifier = Identifier.of(itemKey);
                 if (Registries.ITEM.containsId(identifier)) {
                     item = Registries.ITEM.get(identifier);
                 } else {

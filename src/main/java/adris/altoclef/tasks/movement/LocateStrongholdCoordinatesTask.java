@@ -18,7 +18,6 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.Vec3i;
 
-import java.util.List;
 import java.util.Optional;
 
 public class LocateStrongholdCoordinatesTask extends Task {
@@ -28,15 +27,22 @@ public class LocateStrongholdCoordinatesTask extends Task {
     private static final int SECOND_EYE_THROW_DISTANCE = 30; // target distance between first throw and second throw
 
     private final int _targetEyes;
+    private final int _minimumEyes;
     private final TimerGame _throwTimer = new TimerGame(5);
     private LocateStrongholdCoordinatesTask.EyeDirection _cachedEyeDirection = null;
     private LocateStrongholdCoordinatesTask.EyeDirection _cachedEyeDirection2 = null;
     private Entity _currentThrownEye = null;
     private Vec3i _strongholdEstimatePos = null;
 
-    public LocateStrongholdCoordinatesTask(int targetEyes) {
+    public LocateStrongholdCoordinatesTask(int targetEyes, int minimumEyes) {
         _targetEyes = targetEyes;
+        _minimumEyes = minimumEyes;
     }
+
+    public LocateStrongholdCoordinatesTask(int targetEyes) {
+        this(targetEyes, 12);
+    }
+
 
     @SuppressWarnings("UnnecessaryLocalVariable")
     static Vec3i calculateIntersection(Vec3d start1, Vec3d direction1, Vec3d start2, Vec3d direction2) {
@@ -67,7 +73,7 @@ public class LocateStrongholdCoordinatesTask extends Task {
         }
 
         // Pick up eye if we need to/want to.
-        if (mod.getItemStorage().getItemCount(Items.ENDER_EYE) < _targetEyes && mod.getEntityTracker().itemDropped(Items.ENDER_EYE) &&
+        if (mod.getItemStorage().getItemCount(Items.ENDER_EYE) < _minimumEyes && mod.getEntityTracker().itemDropped(Items.ENDER_EYE) &&
                 !mod.getEntityTracker().entityFound(EyeOfEnderEntity.class)) {
             setDebugState("Picking up dropped ender eye.");
             return new PickupDroppedItemTask(Items.ENDER_EYE, _targetEyes);
@@ -77,25 +83,27 @@ public class LocateStrongholdCoordinatesTask extends Task {
         if (mod.getEntityTracker().entityFound(EyeOfEnderEntity.class)) {
             if (_currentThrownEye == null || !_currentThrownEye.isAlive()) {
                 Debug.logMessage("New eye direction");
-                List<EyeOfEnderEntity> enderEyes = mod.getEntityTracker().getTrackedEntities(EyeOfEnderEntity.class);
-                if (!enderEyes.isEmpty()) {
-                    for (EyeOfEnderEntity enderEye : enderEyes) {
-                        _currentThrownEye = enderEye;
-                    }
-                }
+                Optional<Entity> eye = mod.getEntityTracker().getClosestEntity(EyeOfEnderEntity.class);
+                eye.ifPresent(entity -> _currentThrownEye = entity);
                 if (_cachedEyeDirection2 != null) {
                     _cachedEyeDirection = null;
                     _cachedEyeDirection2 = null;
                 } else if (_cachedEyeDirection == null) {
-                    _cachedEyeDirection = new LocateStrongholdCoordinatesTask.EyeDirection(_currentThrownEye.getPos());
+                    _cachedEyeDirection = new EyeDirection(_currentThrownEye.getPos());
                 } else {
-                    _cachedEyeDirection2 = new LocateStrongholdCoordinatesTask.EyeDirection(_currentThrownEye.getPos());
+                    _cachedEyeDirection2 = new EyeDirection(_currentThrownEye.getPos());
                 }
             }
             if (_cachedEyeDirection2 != null) {
                 _cachedEyeDirection2.updateEyePos(_currentThrownEye.getPos());
             } else if (_cachedEyeDirection != null) {
                 _cachedEyeDirection.updateEyePos(_currentThrownEye.getPos());
+            }
+
+            if (mod.getEntityTracker().getClosestEntity(EyeOfEnderEntity.class).isPresent() &&
+                    !mod.getClientBaritone().getPathingBehavior().isPathing()) {
+                LookHelper.lookAt(mod,
+                        mod.getEntityTracker().getClosestEntity(EyeOfEnderEntity.class).get().getEyePos());
             }
 
             setDebugState("Waiting for eye to travel.");

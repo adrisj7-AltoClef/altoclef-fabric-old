@@ -8,6 +8,7 @@ import adris.altoclef.tasks.movement.TimeoutWanderTask;
 import adris.altoclef.tasksystem.ITaskRequiresGrounded;
 import adris.altoclef.tasksystem.Task;
 import adris.altoclef.util.ItemTarget;
+import adris.altoclef.util.helpers.ItemHelper;
 import adris.altoclef.util.helpers.WorldHelper;
 import adris.altoclef.util.progresscheck.MovementProgressChecker;
 import baritone.api.schematic.AbstractSchematic;
@@ -64,6 +65,8 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
     @Override
     protected void onStart(AltoClef mod) {
         _progressChecker.reset();
+        mod.getBehaviour().push();
+        mod.getBehaviour().addProtectedItems(ItemHelper.blocksToItems(_toPlace));
         // If we get interrupted by another task, this might cause problems...
         //_wanderTask.resetWander();
     }
@@ -94,7 +97,6 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
             _progressChecker.reset();
             return _wanderTask;
         }
-
         if (_autoCollectStructureBlocks) {
             if (_materialTask != null && _materialTask.isActive() && !_materialTask.isFinished(mod)) {
                 setDebugState("No structure items, collecting cobblestone + dirt as default.");
@@ -145,6 +147,7 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
 
     @Override
     protected void onStop(AltoClef mod, Task interruptTask) {
+        mod.getBehaviour().pop();
         mod.getClientBaritone().getBuilderProcess().onLostControl();
     }
 
@@ -203,7 +206,7 @@ public class PlaceBlockTask extends Task implements ITaskRequiresGrounded {
                 }
                 Debug.logInternal("Failed to find throwaway block");
                 // No throwaways available!!
-                return new BlockOptionalMeta(Blocks.COBBLESTONE).getAnyBlockState();
+                return new BlockOptionalMeta(Blocks.DIRT).getAnyBlockState();
             }
             // Don't care.
             return blockState;

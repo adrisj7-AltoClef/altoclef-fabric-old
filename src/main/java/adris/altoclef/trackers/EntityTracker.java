@@ -369,7 +369,7 @@ public class EntityTracker extends Tracker {
                     if (EntityHelper.isAngryAtPlayer(_mod, entity)) {
 
                         // Check if the mob is facing us or is close enough
-                        boolean closeEnough = entity.isInRange(_mod.getPlayer(), 26);
+                        boolean closeEnough = entity.isInRange(_mod.getPlayer(), 16);
 
                         //Debug.logInternal("TARGET: " + hostile.is);
                         if (closeEnough) {

@@ -20,7 +20,7 @@ import org.apache.commons.lang3.ArrayUtils;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
-import java.util.List;
+import java.util.Optional;
 
 public class ReplaceBlocksTask extends Task {
 
@@ -92,10 +92,14 @@ public class ReplaceBlocksTask extends Task {
 
         // Get to replace item
         if (!mod.getItemStorage().hasItem(_toReplace.getMatches())) {
-            List<BlockPos> locations = mod.getBlockTracker().getKnownLocations(_toFind);
             int need = 0;
-            if (!locations.isEmpty()) {
-                for (BlockPos loc : locations) if (isWithinRange(loc) && need < MAX_MATERIALS_NEEDED_AT_A_TIME) need++;
+            for (Block toFind : _toFind) {
+                if (mod.getBlockTracker().isTracking(toFind)) {
+                    Optional<BlockPos> location = mod.getBlockTracker().getNearestTracking(toFind);
+                    if (location.isPresent() && isWithinRange(location.get()) && need < MAX_MATERIALS_NEEDED_AT_A_TIME) {
+                        need++;
+                    }
+                }
             }
             if (need == 0) {
                 setDebugState("No replaceable blocks found, wandering.");
@@ -112,7 +116,7 @@ public class ReplaceBlocksTask extends Task {
         while (!_forceReplace.isEmpty()) {
             BlockPos toReplace = _forceReplace.pop();
             if (!ArrayUtils.contains(blocksToPlace, mod.getWorld().getBlockState(toReplace).getBlock())) {
-                _replaceTask = new PlaceBlockTask(toReplace, blocksToPlace);
+                _replaceTask = new PlaceBlockTask(toReplace, blocksToPlace, false, true);
                 return _replaceTask;
             }
         }
@@ -120,7 +124,7 @@ public class ReplaceBlocksTask extends Task {
         // Now replace
         setDebugState("Searching for blocks to replace...");
         return new DoToClosestBlockTask(whereToPlace -> {
-            _replaceTask = new PlaceBlockTask(whereToPlace, blocksToPlace);
+            _replaceTask = new PlaceBlockTask(whereToPlace, blocksToPlace, false, true);
             return _replaceTask;
         },
                 this::isWithinRange,

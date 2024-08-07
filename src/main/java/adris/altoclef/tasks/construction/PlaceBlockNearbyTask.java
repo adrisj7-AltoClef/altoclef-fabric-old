@@ -145,7 +145,7 @@ public class PlaceBlockNearbyTask extends Task {
         if (_tryPlace != null) {
             setDebugState("Trying to place at " + _tryPlace);
             _justPlaced = _tryPlace;
-            return new PlaceBlockTask(_tryPlace, _toPlace);
+            return new PlaceBlockTask(_tryPlace, _toPlace, false, true);
         }
 
         // Look in random places to maybe get a random hit

@@ -22,6 +22,7 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public class CollectBlazeRodsTask extends ResourceTask {
 
@@ -61,23 +62,19 @@ public class CollectBlazeRodsTask extends ResourceTask {
             setDebugState("Going to nether");
             return new DefaultGoToDimensionTask(Dimension.NETHER);
         }
-
-        Optional<Entity> toKill = Optional.empty();
         // If there is a blaze, kill it.
-        if (mod.getEntityTracker().entityFound(BlazeEntity.class)) {
-            toKill = mod.getEntityTracker().getClosestEntity(BlazeEntity.class);
-            if (toKill.isPresent()) {
-                if (mod.getPlayer().getHealth() <= TOO_LITTLE_HEALTH_BLAZE &&
-                        mod.getEntityTracker().getTrackedEntities(BlazeEntity.class).size() >= TOO_MANY_BLAZES) {
-                    setDebugState("Running away as there are too many blazes nearby.");
-                    return new RunAwayFromHostilesTask(15 * 2, true);
-                }
+        Predicate<Entity> safeToPursue = entity -> !isHoveringAboveLavaOrTooHigh(mod, entity);
+        Optional<Entity> toKill;
+        toKill = mod.getEntityTracker().getClosestEntity(safeToPursue, BlazeEntity.class);
+        if (toKill.isPresent()) {
+            if (mod.getPlayer().getHealth() <= TOO_LITTLE_HEALTH_BLAZE &&
+                    mod.getEntityTracker().getTrackedEntities(BlazeEntity.class).size() >= TOO_MANY_BLAZES) {
+                setDebugState("Running away as there are too many blazes nearby.");
+                return new RunAwayFromHostilesTask(15 * 2, true);
             }
-
-            if (_foundBlazeSpawner != null && toKill.isPresent()) {
+            if (_foundBlazeSpawner != null) {
                 Entity kill = toKill.get();
                 Vec3d nearest = kill.getPos();
-
                 double sqDistanceToPlayer = nearest.squaredDistanceTo(mod.getPlayer().getPos());//_foundBlazeSpawner.getX(), _foundBlazeSpawner.getY(), _foundBlazeSpawner.getZ());
                 // Ignore if the blaze is too far away.
                 if (sqDistanceToPlayer > SPAWNER_BLAZE_RADIUS * SPAWNER_BLAZE_RADIUS) {
@@ -89,14 +86,9 @@ public class CollectBlazeRodsTask extends ResourceTask {
                 }
             }
         }
-        if (toKill.isPresent() && toKill.get().isAlive()) {
-            if (isHoveringAboveLavaOrTooHigh(mod, toKill.get())) {
-                toKill = Optional.empty();
-            }
+        if (toKill.isPresent()) {
             setDebugState("Killing blaze");
-            if (toKill.isPresent()) {
-                return new KillEntitiesTask(toKill.get().getClass());
-            }
+            return new KillEntitiesTask(safeToPursue, toKill.get().getClass());
         }
 
 
@@ -111,28 +103,23 @@ public class CollectBlazeRodsTask extends ResourceTask {
             if (!_foundBlazeSpawner.isWithinDistance(mod.getPlayer().getPos(), 4)) {
                 setDebugState("Going to blaze spawner");
                 return new GetToBlockTask(_foundBlazeSpawner.up(), false);
-            } else {
-
-                // Put out fire that might mess with us.
-                Optional<BlockPos> nearestFire = mod.getBlockTracker().getNearestWithinRange(_foundBlazeSpawner, 5, Blocks.FIRE);
-                if (nearestFire.isPresent()) {
-                    setDebugState("Clearing fire around spawner to prevent loss of blaze rods.");
-                    return new PutOutFireTask(nearestFire.get());
-                }
-
-                setDebugState("Waiting near blaze spawner for blazes to spawn");
-                return null;
             }
-        } else {
-            // Search for blaze
-            for (BlockPos pos : mod.getBlockTracker().getKnownLocations(Blocks.SPAWNER)) {
-                if (isValidBlazeSpawner(mod, pos)) {
-                    _foundBlazeSpawner = pos;
-                    break;
-                }
+            // Put out fire that might mess with us.
+            Optional<BlockPos> nearestFire = mod.getBlockTracker().getNearestWithinRange(_foundBlazeSpawner, 5, Blocks.FIRE);
+            if (nearestFire.isPresent()) {
+                setDebugState("Clearing fire around spawner to prevent loss of blaze rods.");
+                return new PutOutFireTask(nearestFire.get());
+            }
+            setDebugState("Waiting near blaze spawner for blazes to spawn");
+            return null;
+        }
+        // Search for blaze
+        if (mod.getBlockTracker().isTracking(Blocks.SPAWNER)) {
+            Optional<BlockPos> spawner = mod.getBlockTracker().getNearestTracking(Blocks.SPAWNER);
+            if (spawner.isPresent() && isValidBlazeSpawner(mod, spawner.get())) {
+                _foundBlazeSpawner = spawner.get();
             }
         }
-
         // We need to find our fortress.
         setDebugState("Searching for fortress/Traveling around fortress");
         return _searcher;

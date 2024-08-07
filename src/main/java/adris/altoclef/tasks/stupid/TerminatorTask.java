@@ -16,7 +16,6 @@ import adris.altoclef.tasksystem.Task;
 import adris.altoclef.ui.MessagePriority;
 import adris.altoclef.util.ItemTarget;
 import adris.altoclef.util.SmeltTarget;
-import adris.altoclef.util.helpers.BaritoneHelper;
 import adris.altoclef.util.helpers.ItemHelper;
 import adris.altoclef.util.helpers.LookHelper;
 import adris.altoclef.util.helpers.StorageHelper;
@@ -34,9 +33,6 @@ import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Roams around the world to terminate Sarah Khaannah
@@ -126,12 +122,11 @@ public class TerminatorTask extends Task {
 
                 _runAwayExtraTime.reset();
                 try {
-                    _runAwayTask = new RunAwayFromPlayersTask(() -> {
-                        Stream<PlayerEntity> stream = mod.getEntityTracker().getTrackedEntities(PlayerEntity.class).stream();
-                        synchronized (BaritoneHelper.MINECRAFT_LOCK) {
-                            return stream.filter(toAccept -> shouldPunk(mod, toAccept)).collect(Collectors.toList());
-                        }
-                    }, RUN_AWAY_DISTANCE);
+                    Optional<Entity> player = mod.getEntityTracker().getClosestEntity(PlayerEntity.class);
+                    if (player.isPresent() && player.get() instanceof PlayerEntity playerEntity
+                            && shouldPunk(mod, playerEntity)) {
+                        _runAwayTask = new RunAwayFromPlayersTask(player.get(), RUN_AWAY_DISTANCE);
+                    }
                 } catch (ConcurrentModificationException e) {
                     // oof
                     Debug.logWarning("Duct tape over ConcurrentModificationException (see log)");
@@ -278,7 +273,7 @@ public class TerminatorTask extends Task {
 
     private static class RunAwayFromPlayersTask extends RunAwayFromEntitiesTask {
 
-        public RunAwayFromPlayersTask(Supplier<List<Entity>> toRunAwayFrom, double distanceToRun) {
+        public RunAwayFromPlayersTask(Entity toRunAwayFrom, double distanceToRun) {
             super(toRunAwayFrom, distanceToRun, true, 0.1);
             // More lenient progress checker
             _checker = new MovementProgressChecker();

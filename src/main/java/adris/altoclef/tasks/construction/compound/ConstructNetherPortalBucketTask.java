@@ -126,7 +126,8 @@ public class ConstructNetherPortalBucketTask extends Task {
 
     @Override
     protected Task onTick(AltoClef mod) {
-        if (MarvionBeatMinecraftTask.getConfig().renderDistanceManipulation) {
+        if (MarvionBeatMinecraftTask.getConfig().renderDistanceManipulation
+                && !mod.getClientBaritone().getExploreProcess().isActive()) {
             MinecraftClient.getInstance().options.getViewDistance().setValue(2);
             MinecraftClient.getInstance().options.getEntityDistanceScaling().setValue(0.5);
         }

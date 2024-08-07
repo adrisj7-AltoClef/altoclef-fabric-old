@@ -9,8 +9,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Optional;
 
 public class RunAwayFromCreepersTask extends CustomBaritoneGoalTask {
 
@@ -50,8 +49,8 @@ public class RunAwayFromCreepersTask extends CustomBaritoneGoalTask {
         }
 
         @Override
-        protected List<Entity> getEntities(AltoClef mod) {
-            return new ArrayList<>(mod.getEntityTracker().getTrackedEntities(CreeperEntity.class));
+        protected Optional<Entity> getEntities(AltoClef mod) {
+            return mod.getEntityTracker().getClosestEntity(CreeperEntity.class);
         }
 
         @Override

@@ -24,10 +24,10 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.RaycastContext;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 public class CollectBucketLiquidTask extends ResourceTask {
@@ -137,39 +137,42 @@ public class CollectBucketLiquidTask extends ResourceTask {
         };
 
         // Find nearest water and right click it
-        if (mod.getBlockTracker().anyFound(isSourceLiquid, _toCollect)) {
-            // We want to MINIMIZE this distance to liquid.
-            setDebugState("Trying to collect...");
-            //Debug.logMessage("TEST: " + RayTraceUtils.fluidHandling);
-
-            return new DoToClosestBlockTask(blockPos -> {
-                // Clear above if lava because we can't enter.
-                // but NOT if we're standing right above.
-                if (WorldHelper.isSolid(mod, blockPos.up())) {
-                    if (!_progressChecker.check(mod)) {
-                        mod.getClientBaritone().getPathingBehavior().cancelEverything();
-                        mod.getClientBaritone().getPathingBehavior().forceCancel();
-                        mod.getClientBaritone().getExploreProcess().onLostControl();
-                        mod.getClientBaritone().getCustomGoalProcess().onLostControl();
-                        Debug.logMessage("Failed to break, blacklisting.");
-                        mod.getBlockTracker().requestBlockUnreachable(blockPos);
-                        _blacklist.add(blockPos);
+        if (mod.getBlockTracker().isTracking(_toCollect)) {
+            Optional<BlockPos> nearestSource = mod.getBlockTracker().getNearestTracking(isSourceLiquid, _toCollect);
+            if (nearestSource.isPresent()) {
+                Block nearestSourceBlock = mod.getWorld().getBlockState(nearestSource.get()).getBlock();
+                // We want to MINIMIZE this distance to liquid.
+                setDebugState("Trying to collect...");
+                //Debug.logMessage("TEST: " + RayTraceUtils.fluidHandling);
+                return new DoToClosestBlockTask(blockPos -> {
+                    // Clear above if lava because we can't enter.
+                    // but NOT if we're standing right above.
+                    if (WorldHelper.isSolid(mod, blockPos.up())) {
+                        if (!_progressChecker.check(mod)) {
+                            mod.getClientBaritone().getPathingBehavior().cancelEverything();
+                            mod.getClientBaritone().getPathingBehavior().forceCancel();
+                            mod.getClientBaritone().getExploreProcess().onLostControl();
+                            mod.getClientBaritone().getCustomGoalProcess().onLostControl();
+                            Debug.logMessage("Failed to break, blacklisting.");
+                            mod.getBlockTracker().requestBlockUnreachable(blockPos);
+                            _blacklist.add(blockPos);
+                        }
+                        return new DestroyBlockTask(blockPos.up());
                     }
-                    return new DestroyBlockTask(blockPos.up());
-                }
-
-                // We can reach the block.
-                if (LookHelper.getReach(blockPos).isPresent()) {
-                    return new InteractWithBlockTask(new ItemTarget(Items.BUCKET, 1), blockPos, _toCollect != Blocks.LAVA, new Vec3i(0, 1, 0));
-                }
-                // Get close enough.
-                // up because if we go below we'll try to move next to the liquid (for lava, not a good move)
-                if (this.thisOrChildAreTimedOut() && !wasWandering) {
-                    mod.getBlockTracker().requestBlockUnreachable(blockPos.up());
-                    wasWandering = true;
-                }
-                return new GetCloseToBlockTask(blockPos.up());
-            }, isSourceLiquid, _toCollect);
+                    // We can reach the block.
+                    if (LookHelper.getReach(blockPos).isPresent() &&
+                            mod.getClientBaritone().getPathingBehavior().isSafeToCancel()) {
+                        return new InteractWithBlockTask(new ItemTarget(Items.BUCKET, 1), blockPos, _toCollect != Blocks.LAVA);
+                    }
+                    // Get close enough.
+                    // up because if we go below we'll try to move next to the liquid (for lava, not a good move)
+                    if (this.thisOrChildAreTimedOut() && !wasWandering) {
+                        mod.getBlockTracker().requestBlockUnreachable(blockPos.up());
+                        wasWandering = true;
+                    }
+                    return new GetCloseToBlockTask(blockPos.up());
+                }, isSourceLiquid, nearestSourceBlock);
+            }
         }
 
         // Dimension

@@ -7,18 +7,15 @@ import adris.altoclef.tasksystem.TaskRunner;
 import adris.altoclef.util.helpers.ItemHelper;
 import adris.altoclef.util.helpers.LookHelper;
 import adris.altoclef.util.helpers.StorageHelper;
-import adris.altoclef.util.slots.PlayerSlot;
 import adris.altoclef.util.slots.Slot;
 import adris.altoclef.util.time.TimerGame;
 import baritone.api.utils.Rotation;
 import baritone.api.utils.input.Input;
-import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ChatScreen;
 import net.minecraft.client.gui.screen.DeathScreen;
 import net.minecraft.client.gui.screen.GameMenuScreen;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.slot.SlotActionType;
 
@@ -58,31 +55,31 @@ public class PlayerInteractionFixChain extends TaskChain {
 
         if (!AltoClef.inGame()) return Float.NEGATIVE_INFINITY;
 
-        if (mod.getUserTaskChain().isActive() && _betterToolTimer.elapsed()) {
-            // Equip the right tool for the job if we're not using one.
-            _betterToolTimer.reset();
-            if (mod.getControllerExtras().isBreakingBlock()) {
-                BlockState state = mod.getWorld().getBlockState(mod.getControllerExtras().getBreakingBlockPos());
-                Optional<Slot> bestToolSlot = StorageHelper.getBestToolSlot(mod, state);
-                Slot currentEquipped = PlayerSlot.getEquipSlot();
-
-                // if baritone is running, only accept tools OUTSIDE OF HOTBAR!
-                // Baritone will take care of tools inside the hotbar.
-                if (bestToolSlot.isPresent() && !bestToolSlot.get().equals(currentEquipped)) {
-                    // ONLY equip if the item class is STRICTLY different (otherwise we swap around a lot)
-                    if (StorageHelper.getItemStackInSlot(currentEquipped).getItem() != StorageHelper.getItemStackInSlot(bestToolSlot.get()).getItem()) {
-                        boolean isAllowedToManage = (!mod.getClientBaritone().getPathingBehavior().isPathing() ||
-                                bestToolSlot.get().getInventorySlot() >= 9) && !mod.getFoodChain().isTryingToEat();
-                        if (isAllowedToManage) {
-                            Debug.logMessage("Found better tool in inventory, equipping.");
-                            ItemStack bestToolItemStack = StorageHelper.getItemStackInSlot(bestToolSlot.get());
-                            Item bestToolItem = bestToolItemStack.getItem();
-                            mod.getSlotHandler().forceEquipItem(bestToolItem);
-                        }
-                    }
-                }
-            }
-        }
+//        if (mod.getUserTaskChain().isActive() && _betterToolTimer.elapsed()) {
+//            // Equip the right tool for the job if we're not using one.
+//            _betterToolTimer.reset();
+//            if (mod.getControllerExtras().isBreakingBlock()) {
+//                BlockState state = mod.getWorld().getBlockState(mod.getControllerExtras().getBreakingBlockPos());
+//                Optional<Slot> bestToolSlot = StorageHelper.getBestToolSlot(mod, state);
+//                Slot currentEquipped = PlayerSlot.getEquipSlot();
+//
+//                // if baritone is running, only accept tools OUTSIDE OF HOTBAR!
+//                // Baritone will take care of tools inside the hotbar.
+//                if (bestToolSlot.isPresent() && !bestToolSlot.get().equals(currentEquipped)) {
+//                    // ONLY equip if the item class is STRICTLY different (otherwise we swap around a lot)
+//                    if (StorageHelper.getItemStackInSlot(currentEquipped).getItem() != StorageHelper.getItemStackInSlot(bestToolSlot.get()).getItem()) {
+//                        boolean isAllowedToManage = (!mod.getClientBaritone().getPathingBehavior().isPathing() ||
+//                                bestToolSlot.get().getInventorySlot() >= 9) && !mod.getFoodChain().isTryingToEat();
+//                        if (isAllowedToManage) {
+//                            Debug.logMessage("Found better tool in inventory, equipping.");
+//                            ItemStack bestToolItemStack = StorageHelper.getItemStackInSlot(bestToolSlot.get());
+//                            Item bestToolItem = bestToolItemStack.getItem();
+//                            mod.getSlotHandler().forceEquipItem(bestToolItem);
+//                        }
+//                    }
+//                }
+//            }
+//        }
 
         // Unpress shift (it gets stuck for some reason???)
         if (mod.getInputControls().isHeldDown(Input.SNEAK)) {

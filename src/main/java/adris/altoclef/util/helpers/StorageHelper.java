@@ -5,7 +5,10 @@ import adris.altoclef.Debug;
 import adris.altoclef.TaskCatalogue;
 import adris.altoclef.mixins.AbstractFurnaceScreenHandlerAccessor;
 import adris.altoclef.tasks.CraftInInventoryTask;
-import adris.altoclef.util.*;
+import adris.altoclef.util.CraftingRecipe;
+import adris.altoclef.util.ItemTarget;
+import adris.altoclef.util.MiningRequirement;
+import adris.altoclef.util.RecipeTarget;
 import adris.altoclef.util.slots.CraftingTableSlot;
 import adris.altoclef.util.slots.CursorSlot;
 import adris.altoclef.util.slots.PlayerSlot;
@@ -18,9 +21,9 @@ import net.minecraft.client.gui.screen.GameMenuScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.option.GameOptionsScreen;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.*;
-import net.minecraft.recipe.Recipe;
 import net.minecraft.screen.*;
 import org.apache.commons.lang3.ArrayUtils;
 
@@ -142,7 +145,7 @@ public class StorageHelper {
                     continue;
                 ItemStack stack = getItemStackInSlot(slot);
                 if (stack.getItem() instanceof ToolItem) {
-                    if (stack.getItem().isSuitableFor(state)) {
+                    if (stack.isSuitableFor(state)) {
                         double speed = ToolSet.calculateSpeedVsBlock(stack, state);
                         if (speed > highestSpeed) {
                             highestSpeed = speed;
@@ -201,7 +204,7 @@ public class StorageHelper {
                 Item item = stack.getItem();
                 if (item instanceof ToolItem tool) {
                     Class c = tool.getClass();
-                    int level = tool.getMaterial().getMiningLevel();
+                    int level = tool.getMaterial().getDurability();
                     int prevBest = bestMaterials.getOrDefault(c, 0);
                     if (level > prevBest) {
                         // We had a WORSE tool before.
@@ -240,8 +243,8 @@ public class StorageHelper {
                     if (ItemHelper.canThrowAwayStack(mod, stack)) {
                         possibleSlots.add(slot);
                     }
-                    if (stack.getItem().isFood()) {
-                        calcTotalFoodScore += Objects.requireNonNull(stack.getItem().getFoodComponent()).getHunger();
+                    if (stack.getItem().getComponents().contains(DataComponentTypes.FOOD)) {
+                        calcTotalFoodScore += Objects.requireNonNull(stack.getItem().getComponents().get(DataComponentTypes.FOOD)).nutrition();
                     }
                 }
             }
@@ -264,8 +267,8 @@ public class StorageHelper {
                         // Prioritize material type, then durability.
                         ToolItem leftTool = (ToolItem) left.getItem();
                         ToolItem rightTool = (ToolItem) right.getItem();
-                        if (leftTool.getMaterial().getMiningLevel() != rightTool.getMaterial().getMiningLevel()) {
-                            return leftTool.getMaterial().getMiningLevel() - rightTool.getMaterial().getMiningLevel();
+                        if (leftTool.getMaterial().getDurability() != rightTool.getMaterial().getDurability()) {
+                            return (int) (leftTool.getMaterial().getDurability() - rightTool.getMaterial().getDurability());
                         }
                         // We want less damage.
                         return left.getDamage() - right.getDamage();
@@ -273,8 +276,8 @@ public class StorageHelper {
 
                     // Prioritize food over other things if we lack food.
                     boolean lacksFood = totalFoodScore < 8;
-                    boolean leftIsFood = left.getItem().isFood() && left.getItem() != Items.SPIDER_EYE;
-                    boolean rightIsFood = right.getItem().isFood() && right.getItem() != Items.SPIDER_EYE;
+                    boolean leftIsFood = left.getItem().getComponents().contains(DataComponentTypes.FOOD) && left.getItem() != Items.SPIDER_EYE;
+                    boolean rightIsFood = right.getItem().getComponents().contains(DataComponentTypes.FOOD) && right.getItem() != Items.SPIDER_EYE;
                     if (lacksFood) {
                         if (rightIsFood && !leftIsFood) {
                             return -1;
@@ -284,11 +287,11 @@ public class StorageHelper {
                     }
                     // If both are food, pick the better cost.
                     if (leftIsFood && rightIsFood) {
-                        assert left.getItem().getFoodComponent() != null;
-                        assert right.getItem().getFoodComponent() != null;
-                        int leftCost = left.getItem().getFoodComponent().getHunger() * left.getCount(),
-                                rightCost = right.getItem().getFoodComponent().getHunger() * right.getCount();
-                        return -1 * (leftCost - rightCost);
+                        assert left.getItem().getComponents().get(DataComponentTypes.FOOD) != null;
+                        assert right.getItem().getComponents().get(DataComponentTypes.FOOD) != null;
+                        int leftCost = left.getItem().getComponents().get(DataComponentTypes.FOOD).nutrition() * left.getCount(),
+                                rightCost = right.getItem().getComponents().get(DataComponentTypes.FOOD).nutrition() * right.getCount();
+                        return leftCost - rightCost;
                     }
 
                     // Just discard the one with the smallest quantity, but this doesn't really matter.
@@ -387,8 +390,8 @@ public class StorageHelper {
         int result = 0;
         if (!mod.getItemStorage().getItemStacksPlayerInventory(true).isEmpty()) {
             for (ItemStack stack : mod.getItemStorage().getItemStacksPlayerInventory(true)) {
-                if (stack.isFood())
-                    result += Objects.requireNonNull(stack.getItem().getFoodComponent()).getHunger() * stack.getCount();
+                if (stack.getItem().getComponents().contains(DataComponentTypes.FOOD))
+                    result += Objects.requireNonNull(stack.getItem().getComponents().get(DataComponentTypes.FOOD)).nutrition() * stack.getCount();
             }
         }
         return result;
@@ -621,14 +624,5 @@ public class StorageHelper {
             }
         }
         return results;
-    }
-
-    public static void instantFillRecipeViaBook(AltoClef mod, CraftingRecipe recipe, Item output, boolean craftAll) {
-        Optional<Recipe<?>> recipeToSend = JankCraftingRecipeMapping.getMinecraftMappedRecipe(recipe, output);
-        if (recipeToSend.isPresent()) {
-            mod.getController().clickRecipe(MinecraftClient.getInstance().player.currentScreenHandler.syncId, recipeToSend.get(), craftAll);
-        } else {
-            Debug.logError("Could not find recipe stored in Minecraft!! Recipe: " + recipe + " with output " + output);
-        }
     }
 }

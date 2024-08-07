@@ -24,6 +24,7 @@ public class EscapeFromLavaTask extends CustomBaritoneGoalTask {
 
     @Override
     protected void onStart(AltoClef mod) {
+        mod.getFoodChain().shouldStop(true);
         mod.getBehaviour().push();
         mod.getClientBaritone().getExploreProcess().onLostControl();
         mod.getClientBaritone().getCustomGoalProcess().onLostControl();
@@ -41,15 +42,18 @@ public class EscapeFromLavaTask extends CustomBaritoneGoalTask {
         if (mod.getPlayer().isInLava() || mod.getWorld().getBlockState(mod.getPlayer().getBlockPos().down()).getBlock() == Blocks.LAVA) {
             mod.getInputControls().hold(Input.JUMP);
             mod.getInputControls().hold(Input.SPRINT);
+            mod.getInputControls().hold(Input.MOVE_FORWARD);
         }
         return super.onTick(mod);
     }
 
     @Override
     protected void onStop(AltoClef mod, Task interruptTask) {
+        mod.getFoodChain().shouldStop(false);
         mod.getBehaviour().pop();
         mod.getInputControls().release(Input.JUMP);
         mod.getInputControls().release(Input.SPRINT);
+        mod.getInputControls().release(Input.MOVE_FORWARD);
     }
 
     @Override

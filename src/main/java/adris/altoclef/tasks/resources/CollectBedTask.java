@@ -1,6 +1,7 @@
 package adris.altoclef.tasks.resources;
 
 import adris.altoclef.AltoClef;
+import adris.altoclef.Debug;
 import adris.altoclef.TaskCatalogue;
 import adris.altoclef.tasks.ResourceTask;
 import adris.altoclef.tasksystem.Task;
@@ -8,8 +9,12 @@ import adris.altoclef.util.CraftingRecipe;
 import adris.altoclef.util.ItemTarget;
 import adris.altoclef.util.MiningRequirement;
 import adris.altoclef.util.helpers.ItemHelper;
+import adris.altoclef.util.helpers.WorldHelper;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
+import net.minecraft.util.math.BlockPos;
+
+import java.util.Optional;
 
 public class CollectBedTask extends CraftWithMatchingWoolTask {
 
@@ -57,9 +62,18 @@ public class CollectBedTask extends CraftWithMatchingWoolTask {
     @Override
     protected Task onResourceTick(AltoClef mod) {
         // Break beds from the world if possible, that would be pretty fast.
-        if (mod.getBlockTracker().anyFound(BEDS)) {
-            // Failure + blacklisting is encapsulated within THIS task
-            return new MineAndCollectTask(new ItemTarget(ItemHelper.BED, 1), BEDS, MiningRequirement.HAND);
+        Block[] copperBlocks = ItemHelper.itemsToBlocks(ItemHelper.COPPER_BLOCKS);
+        Optional<BlockPos> nearestBed = mod.getBlockTracker().getNearestTracking(BEDS);
+        if (nearestBed.isPresent() && WorldHelper.canBreak(mod, nearestBed.get())) {
+            for (Block CopperBlock : copperBlocks) {
+                Block blockBelow = mod.getWorld().getBlockState(nearestBed.get().down()).getBlock();
+                if (blockBelow == CopperBlock) {
+                    Debug.logMessage("Blacklisting bed in trial chambers.");
+                    mod.getBlockTracker().requestBlockUnreachable(nearestBed.get(), 0);
+                }
+            }
+            // Failure + blacklisting is encapsulated within THIS task)
+            return new MineAndCollectTask(new ItemTarget(ItemHelper.BED), BEDS, MiningRequirement.HAND);
         }
         return super.onResourceTick(mod);
     }
